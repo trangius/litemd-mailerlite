@@ -2,6 +2,7 @@
 // MailerLite plugin settings panel (rendered inside the Advanced page)
 $mlConfig = \LiteMD\Config::getPluginConfig('mailerlite', []);
 $apiKey = $mlConfig['api_key'] ?? '';
+$contactEmail = $mlConfig['contact_email'] ?? '';
 $basePath = \LiteMD\BasePath::detect('/admin');
 $webhookUrl = rtrim(
     (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http')
@@ -18,6 +19,12 @@ $webhookUrl = rtrim(
                 <label class="advanced-field">
                     <span class="advanced-label">API Key</span>
                     <input type="password" id="mailerlite-api-key" class="advanced-input" value="<?= htmlspecialchars($apiKey, ENT_QUOTES, 'UTF-8') ?>">
+                </label>
+
+                <label class="advanced-field">
+                    <span class="advanced-label">Contact Email</span>
+                    <input type="email" id="mailerlite-contact-email" class="advanced-input" value="<?= htmlspecialchars($contactEmail, ENT_QUOTES, 'UTF-8') ?>">
+                    <span class="advanced-hint">Shown to users who cannot re-subscribe automatically.</span>
                 </label>
 
                 <div class="advanced-field">
@@ -59,6 +66,7 @@ $webhookUrl = rtrim(
     saveBtn.addEventListener("click", function () {
         EditorUtils.apiPost("mailerlite-settings-save", {
             api_key: document.getElementById("mailerlite-api-key").value,
+            contact_email: document.getElementById("mailerlite-contact-email").value,
             csrf: (window.EDITOR_CONFIG || {}).csrfToken || ""
         }).then(function () {
             alert("MailerLite settings saved.");

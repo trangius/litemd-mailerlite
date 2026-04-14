@@ -29,6 +29,7 @@ class Plugin
             'requires'    => [['mysql', '1.0'], ['users', '1.0']],
             'setup_fields' => [
                 ['name' => 'api_key', 'label' => 'MailerLite API key', 'type' => 'text', 'required' => true],
+                ['name' => 'contact_email', 'label' => 'Contact email (shown if re-subscribe fails)', 'type' => 'email'],
             ],
         ];
     }
@@ -40,6 +41,7 @@ class Plugin
     public static function setup(array $data = []): string
     {
         $apiKey = trim((string) ($data['api_key'] ?? ''));
+        $contactEmail = trim((string) ($data['contact_email'] ?? ''));
         if ($apiKey === '') {
             throw new \RuntimeException('MailerLite API key is required.');
         }
@@ -50,7 +52,7 @@ class Plugin
             throw new \RuntimeException('Could not connect to MailerLite. Check your API key.');
         }
 
-        // Save API key to config.php under plugins.newsletter
+        // Save settings to config.php under plugins.mailerlite
         $configFile = dirname(__DIR__, 2) . '/config.php';
         $config = is_file($configFile) ? (array) require $configFile : [];
         if (!isset($config['plugins'])) {
@@ -58,6 +60,7 @@ class Plugin
         }
         $config['plugins']['mailerlite'] = [
             'api_key' => $apiKey,
+            'contact_email' => $contactEmail,
         ];
         self::writeMainConfig($configFile, $config);
 
@@ -171,6 +174,7 @@ class Plugin
     public static function apiSaveSettings(array $payload = []): void
     {
         $apiKey = trim((string) ($payload['api_key'] ?? ''));
+        $contactEmail = trim((string) ($payload['contact_email'] ?? ''));
         if ($apiKey === '') {
             editor_error_response('API key is required.', 400, 'saving MailerLite settings');
             return;
@@ -191,6 +195,7 @@ class Plugin
         }
         $config['plugins']['mailerlite'] = [
             'api_key' => $apiKey,
+            'contact_email' => $contactEmail,
         ];
         self::writeMainConfig($configFile, $config);
 
@@ -351,11 +356,31 @@ class Plugin
             Http::jsonResponse(['ok' => false, 'error' => 'Could not reach MailerLite.'], 502);
         }
 
-        // Update local column on success
-        $stmt = $pdo->prepare('UPDATE users SET newsletter = ? WHERE id = ?');
-        $stmt->execute([$subscribe ? 1 : 0, $userId]);
+        // Check the actual status MailerLite set — it may differ from what
+        // we requested (e.g. MailerLite won't re-subscribe someone who
+        // previously unsubscribed via their own unsubscribe link)
+        $actualStatus = $response['data']['status'] ?? '';
+        $actuallyActive = ($actualStatus === 'active');
 
-        Http::jsonResponse(['ok' => true, 'newsletter' => $subscribe ? 1 : 0]);
+        // Update local column to match what MailerLite actually did
+        $stmt = $pdo->prepare('UPDATE users SET newsletter = ? WHERE id = ?');
+        $stmt->execute([$actuallyActive ? 1 : 0, $userId]);
+
+        // If we tried to subscribe but MailerLite refused, tell the user
+        if ($subscribe && !$actuallyActive) {
+            $contactEmail = self::getContactEmail();
+            $msg = 'This email was previously unsubscribed and cannot be re-subscribed automatically.';
+            if ($contactEmail !== '') {
+                $msg .= ' Contact ' . $contactEmail;
+            }
+            Http::jsonResponse([
+                'ok' => false,
+                'error' => $msg,
+                'newsletter' => 0,
+            ]);
+        }
+
+        Http::jsonResponse(['ok' => true, 'newsletter' => $actuallyActive ? 1 : 0]);
     }
 
     // ========================================================================
@@ -427,33 +452,40 @@ class Plugin
         $email = $user['email'];
 
         if ($subscribe) {
-            // Add/update subscriber on MailerLite
             $response = self::mailerliteRequest('POST', 'subscribers', [
                 'email' => $email,
                 'status' => 'active',
             ], $apiKey);
-
-            if ($response === null) {
-                editor_error_response('Could not reach MailerLite.', 502, 'subscribing ' . $email);
-                return;
-            }
         } else {
-            // Unsubscribe on MailerLite
             $response = self::mailerliteRequest('PUT', 'subscribers/' . urlencode($email), [
                 'status' => 'unsubscribed',
             ], $apiKey);
-
-            if ($response === null) {
-                editor_error_response('Could not reach MailerLite.', 502, 'unsubscribing ' . $email);
-                return;
-            }
         }
 
-        // Update local column on success
-        $stmt = $pdo->prepare('UPDATE users SET newsletter = ? WHERE id = ?');
-        $stmt->execute([$subscribe ? 1 : 0, $userId]);
+        if ($response === null) {
+            editor_error_response('Could not reach MailerLite.', 502, ($subscribe ? 'subscribing ' : 'unsubscribing ') . $email);
+            return;
+        }
 
-        editor_json_response(['ok' => true, 'newsletter' => $subscribe ? 1 : 0]);
+        // Check the actual status MailerLite set
+        $actualStatus = $response['data']['status'] ?? '';
+        $actuallyActive = ($actualStatus === 'active');
+
+        // Update local column to match what MailerLite actually did
+        $stmt = $pdo->prepare('UPDATE users SET newsletter = ? WHERE id = ?');
+        $stmt->execute([$actuallyActive ? 1 : 0, $userId]);
+
+        if ($subscribe && !$actuallyActive) {
+            $contactEmail = self::getContactEmail();
+            $msg = 'This email was previously unsubscribed and cannot be re-subscribed automatically.';
+            if ($contactEmail !== '') {
+                $msg .= ' Contact ' . $contactEmail;
+            }
+            editor_error_response($msg, 400, 'subscribing ' . $email);
+            return;
+        }
+
+        editor_json_response(['ok' => true, 'newsletter' => $actuallyActive ? 1 : 0]);
     }
 
     // ========================================================================
@@ -513,6 +545,15 @@ class Plugin
     {
         $pluginConfig = Config::getPluginConfig('mailerlite', []);
         return (string) ($pluginConfig['api_key'] ?? '');
+    }
+
+    // ----------------------------------------------------------------------------
+    // Get the contact email shown when re-subscribe fails.
+    // ----------------------------------------------------------------------------
+    private static function getContactEmail(): string
+    {
+        $pluginConfig = Config::getPluginConfig('mailerlite', []);
+        return (string) ($pluginConfig['contact_email'] ?? '');
     }
 
     // ----------------------------------------------------------------------------
