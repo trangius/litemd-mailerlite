@@ -393,15 +393,22 @@ class Plugin
     // ----------------------------------------------------------------------------
     public static function handleWebhook(): void
     {
-        $payload = json_decode((string) file_get_contents('php://input'), true);
+        $raw = (string) file_get_contents('php://input');
+
+        // Debug log — write the raw webhook payload to a file so we can
+        // inspect exactly what MailerLite sends
+        $logFile = dirname(__DIR__, 2) . '/webhook-debug.log';
+        file_put_contents($logFile, date('[Y-m-d H:i:s] ') . $raw . "\n", FILE_APPEND);
+
+        $payload = json_decode($raw, true);
         if (!is_array($payload)) {
             Http::jsonResponse(['ok' => false, 'error' => 'Invalid payload.'], 400);
         }
 
-        // MailerLite webhook events include subscriber.unsubscribed,
-        // subscriber.subscribed, etc.
-        $email = (string) ($payload['events'][0]['data']['subscriber']['email'] ?? '');
-        $event = (string) ($payload['events'][0]['type'] ?? '');
+        // MailerLite webhook payload is a flat subscriber object with an
+        // "event" field: { "email": "...", "event": "subscriber.unsubscribed", ... }
+        $email = (string) ($payload['email'] ?? '');
+        $event = (string) ($payload['event'] ?? '');
 
         if ($email === '') {
             Http::jsonResponse(['ok' => true, 'message' => 'No email in payload.']);
