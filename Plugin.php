@@ -153,6 +153,49 @@ class Plugin
 
         // Admin API action for toggling subscription from the members panel
         PluginRegistry::addApiAction('newsletter-toggle', [self::class, 'apiToggle'], 'POST');
+
+        // Settings sub-tab under Advanced
+        PluginRegistry::addAdvancedTab([
+            'slug'  => 'mailerlite',
+            'label' => 'MailerLite',
+            'file'  => __DIR__ . '/admin/settings.php',
+        ]);
+
+        // API action for saving settings from the admin panel
+        PluginRegistry::addApiAction('mailerlite-settings-save', [self::class, 'apiSaveSettings'], 'POST');
+    }
+
+    // ----------------------------------------------------------------------------
+    // Save updated API key from the admin settings panel.
+    // ----------------------------------------------------------------------------
+    public static function apiSaveSettings(array $payload = []): void
+    {
+        $apiKey = trim((string) ($payload['api_key'] ?? ''));
+        if ($apiKey === '') {
+            editor_error_response('API key is required.', 400, 'saving MailerLite settings');
+            return;
+        }
+
+        // Test the key before saving
+        $response = self::mailerliteRequest('GET', 'subscribers?limit=1', [], $apiKey);
+        if ($response === null) {
+            editor_error_response('Could not connect to MailerLite. Check your API key.', 400, 'saving MailerLite settings');
+            return;
+        }
+
+        // Update config.php plugins.mailerlite section
+        $configFile = dirname(__DIR__, 2) . '/config.php';
+        $config = is_file($configFile) ? (array) require $configFile : [];
+        if (!isset($config['plugins'])) {
+            $config['plugins'] = [];
+        }
+        $config['plugins']['mailerlite'] = [
+            'api_key' => $apiKey,
+        ];
+        self::writeMainConfig($configFile, $config);
+
+        editor_log('MailerLite settings updated');
+        editor_json_response(['ok' => true]);
     }
 
     // ========================================================================
