@@ -319,9 +319,43 @@ class Plugin
         $userId = $_SESSION['user_id'];
         $subscribe = !empty($payload['subscribe']);
 
-        // Reuse the admin toggle logic
-        $fakePayload = ['user_id' => $userId, 'subscribe' => $subscribe];
-        self::apiToggle($fakePayload);
+        // Get the user's email
+        $pdo = PluginRegistry::getService('database');
+        if (!$pdo) {
+            Http::jsonResponse(['ok' => false, 'error' => 'Database not available.'], 500);
+        }
+
+        $stmt = $pdo->prepare('SELECT email FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+        if (!$user) {
+            Http::jsonResponse(['ok' => false, 'error' => 'User not found.'], 404);
+        }
+
+        $apiKey = self::getApiKey();
+        $email = $user['email'];
+
+        // Update MailerLite first
+        if ($subscribe) {
+            $response = self::mailerliteRequest('POST', 'subscribers', [
+                'email' => $email,
+                'status' => 'active',
+            ], $apiKey);
+        } else {
+            $response = self::mailerliteRequest('PUT', 'subscribers/' . urlencode($email), [
+                'status' => 'unsubscribed',
+            ], $apiKey);
+        }
+
+        if ($response === null) {
+            Http::jsonResponse(['ok' => false, 'error' => 'Could not reach MailerLite.'], 502);
+        }
+
+        // Update local column on success
+        $stmt = $pdo->prepare('UPDATE users SET newsletter = ? WHERE id = ?');
+        $stmt->execute([$subscribe ? 1 : 0, $userId]);
+
+        Http::jsonResponse(['ok' => true, 'newsletter' => $subscribe ? 1 : 0]);
     }
 
     // ========================================================================
