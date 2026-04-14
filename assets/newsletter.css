@@ -1,0 +1,17 @@
+/* Newsletter checkbox in auth dropdown */
+.auth-newsletter-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text);
+    cursor: pointer;
+    margin-bottom: var(--spacing-sm);
+}
+
+.auth-newsletter-checkbox {
+    width: 1rem;
+    height: 1rem;
+    cursor: pointer;
+    accent-color: var(--primary-base);
+}
