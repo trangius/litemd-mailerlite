@@ -15,3 +15,10 @@
     cursor: pointer;
     accent-color: var(--primary-base);
 }
+
+.auth-newsletter-error {
+    font-size: 0.8rem;
+    color: var(--danger, #c62828);
+    margin: 0.25rem 0 0.5rem;
+    line-height: 1.3;
+}

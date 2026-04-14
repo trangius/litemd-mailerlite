@@ -12,9 +12,19 @@
         var apiBase = baseUrl ? baseUrl.replace(/\/$/, '') + '/newsletter-toggle' : 'newsletter-toggle';
 
         checkboxes.forEach(function (checkbox) {
+            // Find the error message element near this checkbox
+            var errorEl = checkbox.closest('.auth-newsletter-label')
+                ?.parentElement?.querySelector('.auth-newsletter-error');
+
             checkbox.addEventListener('change', function () {
                 var userId = parseInt(checkbox.dataset.userId, 10);
                 var subscribe = checkbox.checked;
+
+                // Clear any previous error
+                if (errorEl) {
+                    errorEl.hidden = true;
+                    errorEl.textContent = '';
+                }
 
                 fetch(apiBase, {
                     method: 'POST',
@@ -28,8 +38,12 @@
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
                     if (!data.ok) {
-                        // Revert on failure
+                        // Revert on failure and show the error message
                         checkbox.checked = !subscribe;
+                        if (errorEl && data.error) {
+                            errorEl.textContent = data.error;
+                            errorEl.hidden = false;
+                        }
                     }
                 })
                 .catch(function () {

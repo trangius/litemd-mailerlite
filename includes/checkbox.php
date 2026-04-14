@@ -7,3 +7,4 @@
                             <input type="checkbox" class="auth-newsletter-checkbox" data-user-id="<?= (int) $currentUser['id'] ?>"<?= $isSubscribed ? ' checked' : '' ?>>
                             Subscribe to newsletter
                         </label>
+                        <p class="auth-newsletter-error" hidden></p>
