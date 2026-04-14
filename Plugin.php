@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace LiteMD\Plugins\Newsletter;
+namespace LiteMD\Plugins\Mailerlite;
 
 use LiteMD\Plugin as PluginRegistry;
 use LiteMD\Config;
@@ -10,8 +10,8 @@ use LiteMD\BasePath;
 use LiteMD\Http;
 
 // ----------------------------------------------------------------------------
-// Newsletter plugin. Adds a subscription checkbox to the user auth dropdown,
-// syncs with MailerLite, and handles webhooks for external unsubscribes.
+// MailerLite plugin. Adds a newsletter subscription checkbox to the user auth
+// dropdown, syncs with MailerLite, and handles webhooks for external unsubscribes.
 // On login, polls MailerLite to reconcile local state.
 // ----------------------------------------------------------------------------
 class Plugin
@@ -22,9 +22,9 @@ class Plugin
     public static function meta(): array
     {
         return [
-            'name'        => 'Newsletter',
+            'name'        => 'MailerLite',
             'version'     => '1.0',
-            'description' => 'Newsletter subscription with MailerLite sync.',
+            'description' => 'Newsletter subscription synced with MailerLite.',
             'author'      => 'LiteMD',
             'requires'    => [['mysql', '1.0'], ['users', '1.0']],
             'setup_fields' => [
@@ -56,7 +56,7 @@ class Plugin
         if (!isset($config['plugins'])) {
             $config['plugins'] = [];
         }
-        $config['plugins']['newsletter'] = [
+        $config['plugins']['mailerlite'] = [
             'api_key' => $apiKey,
         ];
         self::writeMainConfig($configFile, $config);
@@ -100,8 +100,8 @@ class Plugin
                     $configFile = dirname(__DIR__, 2) . '/config.php';
                     if (is_file($configFile)) {
                         $config = (array) require $configFile;
-                        if (isset($config['plugins']['newsletter'])) {
-                            unset($config['plugins']['newsletter']);
+                        if (isset($config['plugins']['mailerlite'])) {
+                            unset($config['plugins']['mailerlite']);
                         }
                         self::writeMainConfig($configFile, $config);
                     }
@@ -142,8 +142,8 @@ class Plugin
         PluginRegistry::addToSlot('auth-dropdown-extras', [self::class, 'renderCheckbox']);
 
         // Public JS for the checkbox toggle
-        PluginRegistry::addAsset('js', $base . '/plugins/newsletter/assets/newsletter.js');
-        PluginRegistry::addAsset('css', $base . '/plugins/newsletter/assets/newsletter.css');
+        PluginRegistry::addAsset('js', $base . '/plugins/mailerlite/assets/mailerlite.js');
+        PluginRegistry::addAsset('css', $base . '/plugins/mailerlite/assets/mailerlite.css');
 
         // Public route for toggling subscription from the auth dropdown
         PluginRegistry::addRoute('/newsletter-toggle', [self::class, 'handleToggleRoute']);
@@ -434,7 +434,7 @@ class Plugin
     // ----------------------------------------------------------------------------
     private static function getApiKey(): string
     {
-        $pluginConfig = Config::getPluginConfig('newsletter', []);
+        $pluginConfig = Config::getPluginConfig('mailerlite', []);
         return (string) ($pluginConfig['api_key'] ?? '');
     }
 
